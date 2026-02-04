@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taym Buddies: Live Interaction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --pet-white: #ffffff;
+            --pet-black: #000000;
+            --outline: #2d3748;
+        }
+
+        .pet-container {
+            position: relative;
+            width: 130px;
+            height: 160px;
+            margin: 0 auto;
+            z-index: 10;
+        }
+
+        @keyframes breathing {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+        .idle { animation: breathing 3s ease-in-out infinite; }
+
+        /* Evolution Stages */
+        .evo-1 .pet-head { border-color: #8b5cf6 !important; border-width: 5px; }
+        .evo-2 .pet-head { box-shadow: 0 0 20px #fbbf24; border-color: #fbbf24 !important; }
+        .evo-max .pet-head, .evo-max .pet-body { background: #fbbf24 !important; }
+
+        /* Angry State */
+        @keyframes shake {
+            0%, 100% { transform: translate(0,0); }
+            25% { transform: translate(2px, 2px); }
+            50% { transform: translate(-2px, -2px); }
+        }
+        .angry { animation: shake 0.2s infinite !important; }
+        .angry .pet-head { border-color: #ef4444 !important; background: #fee2e2 !important; }
+        .angry .pet-eye-outer { background: #ef4444 !important; height: 3px !important; }
+
+        .pet-body {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 75px;
+            background: var(--pet-white);
+            border: 4px solid var(--outline);
+            border-radius: 40px;
+            z-index: 5;
+        }
+
+        .pet-head-wrapper {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90px;
+            height: 85px;
+            z-index: 20;
+        }
+
+        .pet-head {
+            width: 100%;
+            height: 100%;
+            background: var(--pet-white);
+            border: 4px solid var(--outline);
+            border-radius: 50%;
+            position: relative;
+        }
+
+        .pet-ear {
+            position: absolute;
+            width: 35px;
+            height: 55px;
+            background: var(--pet-black);
+            border: 3px solid var(--outline);
+            border-radius: 50%;
+            top: 5px;
+            z-index: -1;
+        }
+        .pet-ear.left { left: -10px; transform: rotate(-20deg); }
+        .pet-ear.right { right: -10px; transform: rotate(20deg); }
+
+        .pet-eye-outer {
+            position: absolute;
+            width: 8px; height: 8px;
+            background: var(--outline);
+            border-radius: 50%;
+            top: 35px;
+        }
+        .pet-eye-outer.left { left: 20px; }
+        .pet-eye-outer.right { right: 20px; }
+
+        .pet-muzzle {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 10px; height: 6px;
+            background: var(--outline);
+            border-radius: 50%;
+        }
+
+        .pet-tail {
+            position: absolute;
+            width: 12px; height: 35px;
+            background: var(--pet-white);
+            border: 3px solid var(--outline);
+            border-radius: 10px;
+            bottom: 30px; right: -5px;
+            transform-origin: bottom;
+            z-index: 4;
+        }
+
+        .pet-paw {
+            position: absolute;
+            width: 25px; height: 15px;
+            background: var(--pet-white);
+            border: 3px solid var(--outline);
+            border-radius: 50%;
+            bottom: -5px;
+        }
+        .pet-paw.left { left: 15px; }
+        .pet-paw.right { right: 15px; }
+
+        .speech-bubble {
+            background: white;
+            border: 4px solid var(--outline);
+            border-radius: 1.5rem;
+            padding: 1rem;
+            position: relative;
+        }
+
+        .task-row { display: flex; gap: 0.5rem; align-items: center; }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-8 bg-slate-50">
+
+    <!-- Account Selection Screen -->
+    <div id="account-screen" class="fixed inset-0 bg-white flex items-center justify-center z-50 p-4">
+        <div class="p-6 sm:p-8 text-center max-w-lg w-full mx-auto bg-white rounded-2xl shadow-2xl border-4 border-violet-100">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-violet-600 mb-3 sm:mb-4">Taym Buddies</h1>
+            <p class="text-lg sm:text-xl text-gray-700 mb-6 sm:mb-8">Who's playing today?</p>
+            
+            <div id="account-list" class="space-y-3 mb-6"></div>
+            
+            <div class="border-t-2 border-violet-200 pt-6 mt-6">
+                <p class="text-sm text-gray-600 mb-3">Create New Account</p>
+                <input type="text" id="new-owner-input" placeholder="Enter your name" class="w-full p-3 sm:p-4 mb-4 border-2 border-gray-300 rounded-xl text-center text-base sm:text-lg font-bold focus:border-violet-500 outline-none">
+                <button onclick="createAccount()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 shadow-lg text-sm sm:text-base">Create Account</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Screen (Pet Naming) -->
+    <div id="start-screen" class="fixed inset-0 bg-white flex items-center justify-center z-50 hidden p-4">
+        <div class="p-6 sm:p-8 text-center max-w-lg w-full mx-auto bg-white rounded-2xl shadow-2xl border-4 border-violet-100">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-violet-600 mb-3 sm:mb-4">Welcome <span id="owner-name-display"></span>!</h1>
+            <p class="text-lg sm:text-xl text-gray-700 mb-6 sm:mb-8">Give your buddy a name</p>
+            <input type="text" id="pet-name-input" placeholder="Give me a name!" class="w-full p-3 sm:p-4 mb-4 sm:mb-6 border-2 border-gray-300 rounded-xl text-center text-lg sm:text-xl font-bold focus:border-violet-500 outline-none">
+            <button onclick="startTaymBuddies()" class="w-full bg-violet-600 text-white py-3 sm:py-4 rounded-xl font-extrabold text-xl sm:text-2xl hover:bg-violet-700 shadow-lg">Start Interaction</button>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" class="max-w-6xl mx-auto shadow-2xl p-4 sm:p-6 lg:p-10 transition-opacity duration-500 opacity-0 hidden bg-white rounded-3xl">
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-6 sm:mb-8 gap-4">
+            <div class="text-center sm:text-left">
+                <span id="current-time" class="text-lg sm:text-xl font-mono text-violet-600 font-bold bg-violet-50 px-3 sm:px-4 py-1 rounded-lg">--:--</span>
+                <p class="text-xs sm:text-sm text-gray-500 mt-1">Owner: <span id="current-owner" class="font-bold text-violet-600"></span></p>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-800">My Schedule</h1>
+            <div class="text-center sm:text-right">
+                <span id="score-display" class="text-lg sm:text-xl font-bold text-emerald-600 block">Points: 0</span>
+            </div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row lg:space-x-12 gap-8 lg:gap-0">
+            <div class="w-full lg:w-1/2 flex flex-col items-center">
+                <div id="pet-message-box" class="speech-bubble mb-4 w-full text-center border-4 border-violet-600">
+                    <p id="message-text" class="font-bold text-sm sm:text-base text-gray-800 italic">I'm waiting for your tasks!</p>
+                </div>
+                
+                <div id="pet-display" class="pet-container idle">
+                    <div class="pet-body"><div class="pet-paw left"></div><div class="pet-paw right"></div></div>
+                    <div class="pet-tail"></div>
+                    <div class="pet-head-wrapper">
+                        <div class="pet-ear left"></div><div class="pet-ear right"></div>
+                        <div class="pet-head"><div class="pet-eye-outer left"></div><div class="pet-eye-outer right"></div><div class="pet-muzzle"></div></div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex flex-col sm:flex-row gap-3 w-full">
+                    <button onclick="switchAccount()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-bold transition-all shadow-lg text-sm sm:text-base">
+                        🔄 Switch Owner
+                    </button>
+                    <button onclick="endGame()" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold transition-all shadow-lg text-sm sm:text-base">
+                        🚪 Exit Game
+                    </button>
+                </div>
+
+                <!-- IMPROVED TASK INPUT SECTION (NO RED X BUTTONS) -->
+                <div class="mt-8 w-full bg-violet-50 p-4 sm:p-6 rounded-2xl border-2 border-violet-100">
+                    <label class="block text-violet-700 font-bold mb-3 sm:mb-4 text-sm sm:text-base">Start Time:</label>
+                    <div class="flex gap-2 mb-4 sm:mb-6">
+                        <select id="start-hours" class="flex-1 p-3 sm:p-4 border-2 border-white rounded-xl shadow-sm bg-white focus:border-violet-400 text-sm sm:text-base">
+                            <option value="">Hour</option>
+                            <option value="06">6 AM</option><option value="07">7 AM</option><option value="08">8 AM</option>
+                            <option value="09">9 AM</option><option value="10">10 AM</option><option value="11">11 AM</option>
+                            <option value="12">12 PM</option><option value="13">1 PM</option><option value="14">2 PM</option>
+                            <option value="15">3 PM</option><option value="16">4 PM</option><option value="17">5 PM</option>
+                            <option value="18">6 PM</option><option value="19">7 PM</option><option value="20">8 PM</option>
+                            <option value="21">9 PM</option><option value="22">10 PM</option>
+                        </select>
+                        <select id="start-minutes" class="w-24 sm:w-28 p-3 sm:p-4 border-2 border-white rounded-xl shadow-sm bg-white focus:border-violet-400 text-sm sm:text-base">
+                            <option value="">Min</option>
+                            <option value="00">00</option><option value="15">15</option><option value="30">30</option><option value="45">45</option>
+                        </select>
+                    </div>
+                    
+                    <label class="block text-violet-700 font-bold mb-2 text-sm sm:text-base">Tasks:</label>
+                    <div id="task-inputs" class="space-y-2 sm:space-y-3 mb-4">
+                        <div class="task-row">
+                            <input type="text" placeholder="Task name (e.g., Eat)" class="flex-1 p-2 sm:p-3 border-2 border-white rounded-xl shadow-sm focus:border-violet-400 task-name text-sm sm:text-base">
+                            <div class="flex gap-1">
+                                <select class="w-16 sm:w-20 p-2 sm:p-3 border-2 border-white rounded-xl task-duration-hours bg-white focus:border-violet-400 text-xs sm:text-base">
+                                    <option value="0">0h</option><option value="1">1h</option><option value="2">2h</option><option value="3">3h</option>
+                                </select>
+                                <input type="number" placeholder="Min" min="0" max="59" class="w-16 sm:w-20 p-2 sm:p-3 border-2 border-white rounded-xl task-duration-minutes focus:border-violet-400 text-xs sm:text-base">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-col sm:flex-row gap-3 mb-4">
+                        <button onclick="addTaskInput()" id="add-task-btn" class="flex-1 bg-violet-400 text-white py-3 rounded-xl font-bold hover:bg-violet-500 text-sm sm:text-base">+ Add Task</button>
+                        <button onclick="clearTasks()" class="flex-1 bg-gray-400 text-white py-3 rounded-xl font-bold hover:bg-gray-500 text-sm sm:text-base">Clear</button>
+                    </div>
+                    <button onclick="plotTasks()" class="w-full bg-violet-600 text-white py-3 rounded-xl font-bold hover:bg-violet-700 shadow-lg text-sm sm:text-base">Plot My Day!</button>
+                </div>
+            </div>
+
+            <div class="w-full lg:w-1/2 mt-8 lg:mt-0">
+                <h2 class="text-xl sm:text-2xl font-extrabold mb-4 sm:mb-6 text-gray-700 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-2">
+                    <span>Planned by</span><span id="pet-name-display-main" class="text-violet-600">Buddy</span>
+                </h2>
+                <div id="chore-list" class="space-y-3 sm:space-y-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 p-4 rounded-xl text-white font-bold opacity-0 transition-opacity z-50"></div>
+
+    <script>
+        // Global accounts system
+        let accounts = {};
+        let currentOwner = null;
+        let state = {
+            chores: [],
+            points: 0,
+            petName: "Buddy",
+            lastPlottedTime: null,
+            lastResetDate: new Date().toDateString()
+        };
+
+        const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+
+        // Load/Save functions
+        function loadAccounts() {
+            if (typeof localStorage !== 'undefined') {
+                const savedAccounts = localStorage.getItem('taymBuddiesAccounts');
+                if (savedAccounts) {
+                    accounts = JSON.parse(savedAccounts);
+                    Object.keys(accounts).forEach(owner => {
+                        if (accounts[owner].chores) {
+                            accounts[owner].chores = accounts[owner].chores.map(chore => ({
+                                ...chore,
+                                rawStartDate: chore.rawStartDate ? new Date(chore.rawStartDate) : new Date(),
+                                rawEndDate: chore.rawEndDate ? new Date(chore.rawEndDate) : new Date(),
+                                rawDate: chore.rawDate ? new Date(chore.rawDate) : undefined
+                            }));
+                        }
+                    });
+                }
+            }
+        }
+
+        function saveAccounts() {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('taymBuddiesAccounts', JSON.stringify(accounts));
+            }
+        }
+
+        function loadUserState(owner) {
+            if (accounts[owner]) {
+                state = { ...accounts[owner] };
+                if (state.chores) {
+                    state.chores = state.chores.map(chore => ({
+                        ...chore,
+                        rawStartDate: chore.rawStartDate ? new Date(chore.rawStartDate) : new Date(),
+                        rawEndDate: chore.rawEndDate ? new Date(chore.rawEndDate) : new Date(),
+                        rawDate: chore.rawDate ? new Date(chore.rawDate) : undefined
+                    }));
+                }
+                if (state.lastResetDate !== new Date().toDateString()) {
+                    state.points = 0;
+                    state.lastResetDate = new Date().toDateString();
+                    saveUserState();
+                }
+            }
+        }
+
+        function saveUserState() {
+            if (currentOwner) {
+                accounts[currentOwner] = { ...state };
+                saveAccounts();
+            }
+        }
+
+        // Account functions
+        function displayAccounts() {
+            const list = document.getElementById('account-list');
+            const accountNames = Object.keys(accounts);
+            if (accountNames.length === 0) {
+                list.innerHTML = '<p class="text-gray-500 italic">No accounts yet. Create one below!</p>';
+            } else {
+                list.innerHTML = accountNames.map(owner => {
+                    const escapedOwner = owner.replace(/'/g, "\\'");
+                    return `
+                    <div class="w-full bg-violet-100 rounded-xl overflow-hidden transition-all flex">
+                        <button onclick="selectAccount('${escapedOwner}')" class="flex-1 hover:bg-violet-200 text-violet-800 py-3 sm:py-4 px-4 sm:px-6 font-bold text-base sm:text-lg transition-all flex justify-between items-center gap-2">
+                            <span class="truncate">${owner}</span>
+                            <span class="text-xs sm:text-sm text-emerald-600 whitespace-nowrap">Points: ${accounts[owner].points || 0}</span>
+                        </button>
+                        <button onclick="deleteAccount('${escapedOwner}')" class="bg-red-500 hover:bg-red-600 text-white px-3 sm:px-4 font-bold transition-all text-lg sm:text-xl" title="Delete Account">
+                            🗑️
+                        </button>
+                    </div>
+                `;
+                }).join('');
+            }
+        }
+
+        window.deleteAccount = (owner) => {
+            if (confirm(`Are you sure you want to delete "${owner}"'s account? This cannot be undone!`)) {
+                delete accounts[owner];
+                saveAccounts();
+                showToast(`Account "${owner}" deleted!`, "bg-red-500");
+                displayAccounts();
+            }
+        };
+
+        window.createAccount = () => {
+            const input = document.getElementById('new-owner-input');
+            const ownerName = input.value.trim();
+            if (ownerName.length < 2) return showToast("Name must be at least 2 characters!", "bg-red-500");
+            if (accounts[ownerName]) return showToast("Account already exists!", "bg-orange-500");
+            accounts[ownerName] = { chores: [], points: 0, petName: "Buddy", lastResetDate: new Date().toDateString() };
+            saveAccounts();
+            input.value = "";
+            showToast(`Account created for ${ownerName}!`, "bg-emerald-500");
+            displayAccounts();
+        };
+
+        window.selectAccount = (owner) => {
+            currentOwner = owner;
+            loadUserState(owner);
+            document.getElementById('owner-name-display').textContent = owner;
+            document.getElementById('account-screen').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+            if (state.petName && state.petName !== "Buddy") {
+                document.getElementById('start-screen').classList.add('hidden');
+                document.getElementById('app').classList.remove('hidden');
+                setTimeout(() => {
+                    document.getElementById('app').classList.add('opacity-100');
+                    document.getElementById('current-owner').textContent = currentOwner;
+                    document.getElementById('pet-name-display-main').textContent = state.petName;
+                    renderApp();
+                }, 50);
+            }
+        };
+
+        window.switchAccount = () => {
+            saveUserState();
+            speak("See you later! Your progress is saved.");
+            document.getElementById('app').classList.remove('opacity-100');
+            setTimeout(() => {
+                document.getElementById('app').classList.add('hidden');
+                document.getElementById('account-screen').classList.remove('hidden');
+                displayAccounts();
+            }, 300);
+        };
+
+        window.endGame = () => {
+            if (confirm("Are you sure you want to exit? Your progress will be saved.")) {
+                saveUserState();
+                speak("Goodbye! Come back soon!");
+                showToast("Progress saved! See you next time!", "bg-emerald-500");
+                setTimeout(() => {
+                    document.getElementById('app').classList.remove('opacity-100');
+                    setTimeout(() => {
+                        document.getElementById('app').classList.add('hidden');
+                        document.getElementById('account-screen').classList.remove('hidden');
+                        displayAccounts();
+                    }, 300);
+                }, 1500);
+            }
+        };
+
+        window.startTaymBuddies = async () => {
+            const input = document.getElementById('pet-name-input');
+            if (input.value.trim().length < 2) return;
+            try { await Tone.start(); } catch (e) { console.warn("Audio not available:", e); }
+            state.petName = input.value.trim();
+            document.getElementById('pet-name-display-main').textContent = state.petName;
+            document.getElementById('current-owner').textContent = currentOwner;
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            setTimeout(() => document.getElementById('app').classList.add('opacity-100'), 50);
+            renderApp();
+            saveUserState();
+        };
+
+        // IMPROVED TASK FUNCTIONS (NO RED X BUTTONS)
+        window.addTaskInput = () => {
+            const container = document.getElementById('task-inputs');
+            const newRow = document.createElement('div');
+            newRow.className = 'task-row';
+            newRow.innerHTML = `
+                <input type="text" placeholder="Task name (e.g., Study)" class="flex-1 p-2 sm:p-3 border-2 border-white rounded-xl shadow-sm focus:border-violet-400 task-name text-sm sm:text-base">
+                <div class="flex gap-1">
+                    <select class="w-16 sm:w-20 p-2 sm:p-3 border-2 border-white rounded-xl task-duration-hours bg-white focus:border-violet-400 text-xs sm:text-base">
+                        <option value="0">0h</option><option value="1">1h</option><option value="2">2h</option><option value="3">3h</option>
+                    </select>
+                    <input type="number" placeholder="Min" min="0" max="59" class="w-16 sm:w-20 p-2 sm:p-3 border-2 border-white rounded-xl task-duration-minutes focus:border-violet-400 text-xs sm:text-base">
+                </div>
+            `;
+            container.appendChild(newRow);
+            newRow.querySelector('.task-name').focus();
+        };
+
+        window.clearTasks = () => {
+            const container = document.getElementById('task-inputs');
+            container.innerHTML = `
+                <div class="task-row">
+                    <input type="text" placeholder="Task name (e.g., Eat)" class="flex-1 p-2 sm:p-3 border-2 border-white rounded-xl shadow-sm focus:border-violet-400 task-name text-sm sm:text-base">
+                    <div class="flex gap-1">
+                        <select class="w-16 sm:w-20 p-2 sm:p-3 border-2 border-white rounded-xl task-duration-hours bg-white focus:border-violet-400 text-xs sm:text-base">
+                            <option value="0">0h</option><option value="1">1h</option><option value="2">2h</option><option value="3">3h</option>
+                        </select>
+                        <input type="number" placeholder="Min" min="0" max="59" class="w-16 sm:w-20 p-2 sm:p-3 border-2 border-white rounded-xl task-duration-minutes focus:border-violet-400 text-xs sm:text-base">
+                    </div>
+                </div>
+            `;
+            document.getElementById('start-hours').value = '';
+            document.getElementById('start-minutes').value = '';
+            document.querySelector('.task-name').focus();
+            showToast("Tasks cleared! Ready for new schedule.", "bg-blue-500");
+        };
+
+        // FIXED plotTasks with better validation
+        window.plotTasks = () => {
+            const hours = document.getElementById('start-hours').value;
+            const minutes = document.getElementById('start-minutes').value;
+            
+            if (!hours || !minutes) {
+                return showToast("Please select start HOUR and MINUTES!", "bg-orange-500");
+            }
+            
+            const taskRows = document.querySelectorAll('.task-row');
+            const tasks = [];
+            let hasValidationError = false;
+            
+            taskRows.forEach(row => {
+                if (hasValidationError) return; // Stop processing if we already found an error
+                
+                const name = row.querySelector('.task-name').value.trim();
+                const hoursSelect = row.querySelector('.task-duration-hours');
+                const minsInput = row.querySelector('.task-duration-minutes');
+                
+                // Get the values, treating empty/undefined as 0
+                const hoursVal = hoursSelect && hoursSelect.value !== '' ? parseInt(hoursSelect.value) : 0;
+                const minsVal = minsInput && minsInput.value !== '' ? parseInt(minsInput.value) : 0;
+                const totalMins = (hoursVal * 60) + minsVal;
+                
+                // Only validate if there's a name entered (ignore empty rows)
+                if (name) {
+                    // Check if task name is at least 2 characters
+                    if (name.length < 2) {
+                        showToast(`Task name too short: "${name}". Must be at least 2 characters!`, "bg-red-500");
+                        hasValidationError = true;
+                        return;
+                    }
+                    
+                    // Allow letters, numbers, and spaces
+                    if (!/^[a-zA-Z0-9\s]+$/.test(name)) {
+                        showToast(`Invalid task name: "${name}". Use only letters, numbers, and spaces!`, "bg-red-500");
+                        hasValidationError = true;
+                        return;
+                    }
+                    
+                    // Check if duration is at least 5 minutes
+                    if (totalMins < 5) {
+                        showToast(`Task "${name}" needs a duration! Minimum 5 minutes.`, "bg-orange-500");
+                        hasValidationError = true;
+                        return;
+                    }
+                    
+                    tasks.push({ name, duration: totalMins });
+                }
+            });
+            
+            if (hasValidationError) return;
+            
+            if (tasks.length === 0) {
+                return showToast("Add at least one valid task with a name and duration!", "bg-orange-500");
+            }
+            
+            const now = new Date();
+            const startTime = new Date();
+            startTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            if (startTime < now) startTime.setDate(startTime.getDate() + 1);
+            
+            const newChores = [];
+            let currentTime = new Date(startTime);
+            const isFirstPlot = state.chores.length === 0;
+            
+            for (const task of tasks) {
+                const endTime = new Date(currentTime.getTime() + (task.duration * 60000));
+                const startH = currentTime.getHours().toString().padStart(2, '0');
+                const startM = currentTime.getMinutes().toString().padStart(2, '0');
+                const endH = endTime.getHours().toString().padStart(2, '0');
+                const endM = endTime.getMinutes().toString().padStart(2, '0');
+                
+                newChores.push({
+                    id: Date.now() + Math.random(),
+                    name: task.name,
+                    startTime: `${startH}:${startM}`,
+                    endTime: `${endH}:${endM}`,
+                    duration: task.duration,
+                    rawStartDate: new Date(currentTime),
+                    rawEndDate: new Date(endTime),
+                    completed: false,
+                    failed: false,
+                    isFirst: isFirstPlot
+                });
+                currentTime = new Date(endTime);
+            }
+            
+            state.chores.push(...newChores);
+            clearTasks();
+            
+            const scheduleList = newChores.map(c => `${c.name} (${c.startTime}-${c.endTime})`).join(', ');
+            speak(`Perfect! ${scheduleList}. No overlaps!`);
+            
+            renderApp();
+            saveUserState();
+        };
+
+        // Keyboard Navigation (Enter moves between fields)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const active = document.activeElement;
+                e.preventDefault();
+                
+                if (active.classList.contains('task-name')) {
+                    const row = active.closest('.task-row');
+                    const duration = row.querySelector('.task-duration-minutes');
+                    if (duration) duration.focus();
+                } else if (active.classList.contains('task-duration-minutes') || active.classList.contains('task-duration-hours')) {
+                    const addBtn = document.getElementById('add-task-btn');
+                    if (addBtn) addBtn.focus();
+                }
+            }
+            
+            if (e.key === 'Escape') {
+                if (document.activeElement.classList.contains('task-name')) {
+                    document.activeElement.value = '';
+                }
+            }
+        });
+
+        // Rest of your existing functions
+        window.completeChore = (id) => {
+            const chore = state.chores.find(c => c.id === id);
+            const now = new Date();
+            let pointsEarned = 0;
+
+            const isBeforeStart = now < chore.rawStartDate;
+            const isDuringTask = now >= chore.rawStartDate && now <= chore.rawEndDate;
+            const isAfterEnd = now > chore.rawEndDate;
+
+            if (isBeforeStart) {
+                return showToast("Too early! This task hasn't started yet.", "bg-orange-500");
+            } else if (isDuringTask) {
+                pointsEarned = 100;
+                speak("Perfect! You completed it during the scheduled time!");
+                try {
+                    if (Tone.context.state !== 'running') Tone.start();
+                    synth.triggerAttackRelease(["C5", "E5", "G5"], "8n");
+                } catch (e) { console.warn("Sound failed:", e); }
+            } else if (isAfterEnd) {
+                pointsEarned = 10;
+                speak("You finished it, but you missed the time slot...");
+            }
+
+            if (state.points + pointsEarned > 1500) {
+                pointsEarned = Math.max(0, 1500 - state.points);
+                if (pointsEarned === 0) return showToast("Daily points cap reached (1500)!", "bg-red-500");
+                showToast("Capped at daily limit!", "bg-yellow-500");
+            }
+
+            state.points += pointsEarned;
+            chore.completed = true;
+            checkEvolution();
+            renderApp();
+            saveUserState();
+        };
+
+        window.deleteChore = (id) => {
+            state.chores = state.chores.filter(c => c.id !== id);
+            speak("Chore deleted! Time keeps ticking.");
+            renderApp();
+            saveUserState();
+        };
+
+        function checkEvolution() {
+            const pet = document.getElementById('pet-display');
+            pet.classList.remove('evo-1', 'evo-2', 'evo-max');
+            if (state.points >= 1000) pet.classList.add('evo-max');
+            else if (state.points >= 500) pet.classList.add('evo-2');
+        }
+
+        function speak(text) {
+            document.getElementById('message-text').textContent = text;
+        }
+
+        function renderApp() {
+            const list = document.getElementById('chore-list');
+            const pet = document.getElementById('pet-display');
+            const scoreDisp = document.getElementById('score-display');
+            const now = new Date();
+
+            if (state.lastResetDate !== now.toDateString()) {
+                state.points = 0;
+                state.lastResetDate = now.toDateString();
+                saveUserState();
+            }
+
+            scoreDisp.textContent = `Points: ${state.points}`;
+            checkEvolution();
+
+            state.chores.forEach(chore => {
+                if (typeof chore.rawStartDate === 'string') chore.rawStartDate = new Date(chore.rawStartDate);
+                if (typeof chore.rawEndDate === 'string') chore.rawEndDate = new Date(chore.rawEndDate);
+                if (!chore.completed && !chore.failed && now > chore.rawEndDate) {
+                    chore.failed = true;
+                    saveUserState();
+                }
+            });
+
+            pet.classList.remove('angry');
+            const failedChores = state.chores.filter(c => c.failed);
+            if (failedChores.length > 0) {
+                pet.classList.add('angry');
+                const failedNames = failedChores.map(c => c.name).join(', ');
+                speak(`You failed: ${failedNames}! Time's up!`);
+            } else {
+                const upcoming = state.chores.filter(c => !c.completed && !c.failed);
+                if (upcoming.length > 0) {
+                    const nextTask = upcoming[0];
+                    if (now >= nextTask.rawStartDate && now <= nextTask.rawEndDate) {
+                        speak(`Time for: ${nextTask.name}! Do it now!`);
+                    } else {
+                        speak("Get ready for your tasks!");
+                    }
+                }
+            }
+
+            list.innerHTML = state.chores.map(c => {
+                const isFailed = c.failed;
+                const isActive = now >= c.rawStartDate && now <= c.rawEndDate && !c.completed && !c.failed;
+                const isPending = now < c.rawStartDate && !c.completed && !c.failed;
+                
+                return `
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 sm:p-5 border-2 rounded-2xl transition-all gap-3 sm:gap-0 ${
+                        isFailed ? 'bg-red-50 border-red-300' : 
+                        c.completed ? 'bg-emerald-50 border-emerald-300' : 
+                        isActive ? 'bg-yellow-50 border-yellow-300' :
+                        'bg-slate-50 border-transparent'
+                    }">
+                        <div class="flex-1 w-full sm:w-auto">
+                            <p class="font-extrabold text-base sm:text-lg ${c.completed ? 'line-through text-gray-400' : isFailed ? 'text-red-600' : isActive ? 'text-yellow-700' : 'text-gray-800'}">
+                                ${c.name} ${isActive ? '⏰' : ''}
+                            </p>
+                            <p class="text-xs sm:text-sm font-bold ${isFailed ? 'text-red-500' : c.completed ? 'text-emerald-500' : isActive ? 'text-yellow-600' : 'text-violet-500'}">
+                                ${isFailed ? '❌ Task Not Completed' : 
+                                  isPending ? `⏳ ${c.startTime} - ${c.endTime}` :
+                                  `Time: ${c.startTime} - ${c.endTime} (${c.duration} mins)`}
+                            </p>
+                        </div>
+                        <div class="flex space-x-2 w-full sm:w-auto justify-end">
+                            ${!c.completed && !isFailed ? `<button onclick="completeChore(${c.id})" class="bg-violet-600 text-white px-4 py-2 rounded-xl font-bold hover:scale-105 text-sm sm:text-base">Done</button>` : ''}
+                            ${c.completed ? '<span class="text-emerald-500 text-2xl">✓</span>' : ''}
+                            ${(c.completed || isFailed) ? `<button onclick="deleteChore(${c.id})" class="bg-red-500 text-white px-4 py-2 rounded-xl font-bold hover:scale-105 text-sm sm:text-base">Delete</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function showToast(msg, color) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = `fixed bottom-5 left-1/2 -translate-x-1/2 p-4 rounded-xl text-white font-bold z-50 ${color}`;
+            t.style.opacity = "1";
+            setTimeout(() => t.style.opacity = "0", 3000);
+        }
+
+        setInterval(() => {
+            document.getElementById('current-time').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            renderApp();
+        }, 1000);
+
+        // Initialize
+        loadAccounts();
+        displayAccounts();
+    </script>
+</body>
+</html>
